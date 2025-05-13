@@ -2,26 +2,21 @@
 name: Automated Documentation Update
 
 on:
-  push:
-    branches: ["**"]
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 permissions:
-  contents: write       # needed to push updated docs
-  pull-requests: read
+  contents: write       # to push updated docs
+  pull-requests: write  # to update the PR branch
   issues: read
 
 jobs:
   update-docs:
     runs-on: ubuntu-latest
-    # only run when:
-    #  • the pusher isn’t Devin’s bot
-    #  • the commit message doesn’t include [skip-devin]
-    #  • there are changes in src/ (or any code folder you prefer)
+    # Skip if triggered by GH Actions bot or if head commit asks to skip docs
     if: >
-      github.actor != 'devin[bot]' &&
-      !contains(github.event.head_commit.message, '[skip-devin]') &&
-      (contains(join(github.event.head_commit.added, github.event.head_commit.modified), 'src/') ||
-       contains(join(github.event.head_commit.added, github.event.head_commit.modified), 'lib/'))
+      github.actor != 'github-actions[bot]' &&
+      !contains(github.event.pull_request.head.sha, '[skip docs]')
 
     steps:
       - name: Checkout code
@@ -29,33 +24,40 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Launch Devin to Update Docs
-        id: devin-update
+      - name: Get PR files
+        id: pr-files
+        run: |
+          FILES=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" | \
+            jq -r '[.[].filename] | @json')
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+
+      - name: Create Devin Docs Update Session
+        id: devin-docs
         env:
           DEVIN_API_KEY: ${{ secrets.DEVIN_API_KEY }}
-          PLAYBOOK_ID:   ${{ secrets.DEVIN_PLAYBOOK_ID }}
+          FILES_CHANGED: ${{ steps.pr-files.outputs.files }}
+          UPDATE_PROMPT: |
+            You are Devin Docs Assistant. Review the diffs for PR #${{ github.event.pull_request.number }} and update only the existing documentation files (under docs/) to reflect those code changes. Do not create new docs or modify code. Stop when docs are updated.
+
         run: |
-          PROMPT="Please update existing documentation based on the latest code changes in $GITHUB_REPOSITORY at commit $GITHUB_SHA."
+          ESCAPED_PROMPT=$(echo "$UPDATE_PROMPT" | jq -Rs .)
           curl -s -X POST \
             -H "Authorization: Bearer $DEVIN_API_KEY" \
             -H "Content-Type: application/json" \
-            -d '{
-                  "prompt": "'"$PROMPT"'",
-                  "playbook_id": "'"$PLAYBOOK_ID"'",
-                  "idempotent": true
-                }' \
+            -d "{\"prompt\": $ESCAPED_PROMPT}" \
             "https://api.devin.ai/v1/sessions"
 
       - name: Wait for Devin session to finish
-        # You can implement polling here (e.g. a small script that GETs /sessions/{id})
-        run: echo "🚧 implement polling logic to wait until Devin finishes"
+        # Poll GET /v1/sessions/{session_id} until status=='stopped'
+        run: echo "⏳ Waiting for Devin to complete…"
 
       - name: Commit & Push Updated Docs
         run: |
-          git config user.name  "devin[bot]"
-          git config user.email "devin@cognition.ai"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/
           git diff --quiet --exit-code || (
-            git commit -m "docs: auto-update via Devin [skip-devin]" &&
-            git push origin HEAD:${{ github.ref_name }}
+            git commit -m "docs: update via Devin [skip docs]" &&
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
           )
