@@ -6,22 +6,18 @@ on:
     branches: ["**"]        # run on every branch push
 
 permissions:
-  contents: write            # allow committing docs updates
-  pull-requests: write       # (optional) if pushing to PR refs
+  contents: write          # allow committing docs updates
+  pull-requests: write     # (optional) if pushing to PR refs
   issues: read
 
 jobs:
   update-docs:
     runs-on: ubuntu-latest
-    # Skip if the actor is the Actions bot or if the commit message includes [skip docs]
+    # Skip if the actor is the Actions bot or if Devin AI pushed or [skip docs] tag present
     if: >
       github.actor != 'github-actions[bot]' &&
       github.event.head_commit.author.name != 'Devin AI' &&
       !contains(github.event.head_commit.author.email, 'devin-ai-integration') &&
-      !contains(github.event.head_commit.message, '[skip docs]')
-
-    steps:
-      github.actor != 'github-actions[bot]' &&
       !contains(github.event.head_commit.message, '[skip docs]')
 
     steps:
