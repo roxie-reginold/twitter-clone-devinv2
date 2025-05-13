@@ -15,7 +15,7 @@ A full-stack Twitter clone application with real-time updates, user authenticati
 ## Tech Stack
 
 ### Frontend
-- React.js
+- React.js 
 - TypeScript
 - Tailwind CSS for styling
 - React Router for navigation
