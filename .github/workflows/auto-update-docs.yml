@@ -1,62 +1,67 @@
 # .github/workflows/auto-update-docs.yml
-name: Automated Documentation Update
+name: Automated Documentation Update on Push
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  push:
+    branches: ["**"]        # run on every branch push
 
 permissions:
-  contents: write       # allow committing docs updates
-  pull-requests: write  # allow pushing back into the PR branch
+  contents: write            # allow committing docs updates
+  pull-requests: write       # (optional) if pushing to PR refs
   issues: read
 
 jobs:
   update-docs:
     runs-on: ubuntu-latest
-    # skip if triggered by the GitHub Actions bot itself
-    if: github.actor != 'github-actions[bot]'
+    # Skip if the actor is the Actions bot or if the commit message includes [skip docs]
+    if: >
+      github.actor != 'github-actions[bot]' &&
+      github.event.head_commit.author.name != 'Devin AI' &&
+      !contains(github.event.head_commit.author.email, 'devin-ai-integration') &&
+      !contains(github.event.head_commit.message, '[skip docs]')
+
+    steps:
+      github.actor != 'github-actions[bot]' &&
+      !contains(github.event.head_commit.message, '[skip docs]')
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 2        # fetch previous commit for diff
 
-      - name: Get PR files
-        id: pr-files
+      - name: Get changed files
+        id: changed-files
         run: |
-          FILES=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" | \
-            jq -r '[.[].filename] | @json')
-          if [ -z "$FILES" ]; then
-            echo "Error: Failed to fetch or parse PR files."
-            exit 1
-          fi
+          # List files changed in the last commit
+          FILES=$(git diff-tree --no-commit-id --name-only -r ${{ github.sha }} \
+            | jq -R . | jq -s .)
           echo "files=$FILES" >> $GITHUB_OUTPUT
 
       - name: Ask Devin to update docs
         id: devin-docs
         env:
           DEVIN_API_KEY:   ${{ secrets.DEVIN_API_KEY }}
-          FILES_TO_REVIEW: ${{ steps.pr-files.outputs.files }}
+          FILES_TO_REVIEW: ${{ steps.changed-files.outputs.files }}
           UPDATE_PROMPT: |
             You are Devin Docs Assistant.
-            1. Inspect the branch at: ${{ github.server_url }}/${{ github.repository }}/tree/${{ github.event.pull_request.head.ref }}
-            2. Review all changed files in PR #${{ github.event.pull_request.number }} (files: $FILES_TO_REVIEW).
-            3. Update any existing documentation (docs/ or README.md) to reflect the code changes.
-            4. If no README.md exists, create one at the project root summarizing the project and PR changes.
-            5. Commit changes with message "docs: auto-update via Devin [skip docs]" and push back to this branch.
-            6. Do not modify code or create any docs beyond README.md.
-            7. If documentation already reflects the changes, do nothing.
+            1. Clone the repository ${{ github.server_url }}/${{ github.repository }} at commit ${{ github.sha }} locally.
+            2. Set up a pre-push Git hook that prevents pushes from a user with username "Devin AI" or email containing "devin-ai-integration". Activate the hook.
+            3. Review the diffs for changed files (files: $FILES_TO_REVIEW).
+            4. Update existing documentation (docs/ and README.md) to reflect these code changes.
+            5. If no README.md exists, create one at the project root summarizing the project and changes.
+            6. Commit with message "docs: auto-update via Devin [skip docs]" and push that commit back to the same branch.
+            7. Do not modify code or create docs beyond README.md.
+            8. If documentation already reflects changes, do nothing.
         run: |
           ESCAPED_PROMPT=$(jq -Rn --arg p "$UPDATE_PROMPT" '$p')
           curl -s -X POST \
             -H "Authorization: Bearer $DEVIN_API_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"prompt\":$ESCAPED_PROMPT}" \
-            "https://api.devin.ai/v1/sessions"
+            https://api.devin.ai/v1/sessions
 
       - name: Wait for Devin to finish
         run: |
           echo "⏳ Polling Devin session until completion..."
-          # insert your polling logic here (e.g., GET /v1/sessions/{session_id})
+          # Insert polling logic: GET /v1/sessions/{session_id} until status == 'stopped'
