@@ -1,68 +1,76 @@
+# .github/workflows/auto-update-docs.yml
 name: Automated Documentation Update on Push
 
 on:
-  push:                         # runs on every branch by default
+  push: {}                       # run on every branch push
 
 permissions:
-  contents: write               # allow committing docs updates
-  pull-requests: write          # (optional) if pushing to PR refs
+  contents: write
+  pull-requests: write
   issues: read
 
 jobs:
   update-docs:
     runs-on: ubuntu-latest
-    if: >                       # skip if Actions bot, Devin AI, or a [skip docs] commit
+    if: >
       github.actor != 'github-actions[bot]' &&
       github.event.head_commit.author.name != 'Devin AI' &&
       !contains(github.event.head_commit.author.email, 'devin-ai-integration') &&
       !contains(github.event.head_commit.message, '[skip docs]')
 
     steps:
+      # 1 ── Checkout repository
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
+      # 2 ── Collect the list of files changed in this commit
       - name: Get changed files
         id: changed-files
         run: |
           FILES=$(git diff-tree --no-commit-id --name-only -r ${{ github.sha }} \
             | jq -R . | jq -s .)
-          echo "files=$FILES" >> $GITHUB_OUTPUT
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
 
+      # 3 ── Open a Devin session and ask it to update docs
       - name: Ask Devin to update docs
         id: init-session
         env:
           DEVIN_API_KEY: ${{ secrets.DEVIN_API_KEY }}
-          FILES_TO_REVIEW: ${{ steps.changed-files.outputs.files }}
-          UPDATE_PROMPT: |
-            You are Devin Docs Assistant.
-            1. Clone the repository ${{ github.server_url }}/${{ github.repository }} at commit ${{ github.sha }}.
-            2. Install a pre-push Git hook preventing pushes by user "Devin AI" or emails containing "devin-ai-integration".
-            3. Review diffs for changed files: $FILES_TO_REVIEW.
-            4. Update docs/ and README.md to reflect code changes (or create README.md if missing).
-            5. Commit as "docs: auto-update via Devin [skip docs]" and push to the same branch.
-            6. Make no other code changes. If docs are already up-to-date, do nothing.
         run: |
-          # call Devin and capture session_id
-          payload=$(jq -nc --arg p "$UPDATE_PROMPT" '{prompt: $p}')
+          # Build the full prompt at runtime so the file list is expanded.
+          read -r -d '' PROMPT <<'EOF'
+          You are Devin Docs Assistant.
+          1. Clone the repository ${{ github.server_url }}/${{ github.repository }} at commit ${{ github.sha }}.
+          2. Install a pre-push Git hook preventing pushes by user "Devin AI" or emails containing "devin-ai-integration".
+          3. Review diffs for changed files: ${{ steps.changed-files.outputs.files }}
+          4. Update docs/ and README.md to reflect code changes (or create README.md if missing).
+          5. Commit with message "docs: auto-update via Devin [skip docs]" and push to the same branch.
+          6. Make no other code changes. If documentation is already current, do nothing.
+          EOF
+
+          # Call Devin’s API
+          payload=$(jq -nc --arg p "$PROMPT" '{prompt:$p,"idempotent":true}')
           resp=$(curl -s -X POST \
             -H "Authorization: Bearer $DEVIN_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$payload" \
             https://api.devin.ai/v1/sessions)
-          sid=$(echo "$resp" | jq -r .session_id)
-          echo "session_id=$sid" >> $GITHUB_OUTPUT
+          session_id=$(echo "$resp" | jq -r .session_id)
+          echo "session_id=$session_id" >> "$GITHUB_OUTPUT"
 
+      # 4 ── Poll Devin until the session stops
       - name: Wait for Devin to finish
         env:
           DEVIN_API_KEY: ${{ secrets.DEVIN_API_KEY }}
         run: |
           session_id=${{ steps.init-session.outputs.session_id }}
           echo "⏳ Waiting for Devin session $session_id to complete…"
-          until [ "$(curl -s -H "Authorization: Bearer $DEVIN_API_KEY" \
-                  https://api.devin.ai/v1/sessions/$session_id \
-                  | jq -r .status)" = "stopped" ]; do
+          until [ "$(curl -s \
+                   -H "Authorization: Bearer $DEVIN_API_KEY" \
+                   https://api.devin.ai/v1/session/$session_id \
+                   | jq -r .status)" = "stopped" ]; do
             sleep 10
           done
           echo "✅ Devin session completed."
