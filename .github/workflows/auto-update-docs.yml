@@ -1,4 +1,3 @@
-```yaml
 # .github/workflows/auto-update-docs.yml
 name: Automated Documentation Update
 
@@ -65,4 +64,3 @@ jobs:
         run: |
           echo "⏳ Waiting for Devin to complete..."
           # Implement polling logic here (GET /v1/sessions/{session_id})
-```
