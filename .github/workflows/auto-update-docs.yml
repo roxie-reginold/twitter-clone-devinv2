@@ -1,3 +1,4 @@
+```yaml
 # .github/workflows/auto-update-docs.yml
 name: Automated Documentation Update
 
@@ -13,41 +14,47 @@ permissions:
 jobs:
   update-docs:
     runs-on: ubuntu-latest
-    # don’t run when GH Actions bot or PR head asks to skip
+    # Skip when GitHub Actions bot or PR head requests skip
     if: >
       github.actor != 'github-actions[bot]' &&
       !contains(github.event.pull_request.head.sha, '[skip docs]')
 
     steps:
-      - name: Checkout PR head
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
-      - name: Get list of changed files
+      - name: Get PR files
         id: pr-files
         run: |
           FILES=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-            | jq -r '[.[].filename] | @json')
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" | \
+            jq -r '[.[].filename] | @json')
+
+          if [ -z "$FILES" ]; then
+            echo "Error: Failed to fetch or parse PR files."
+            exit 1
+          fi
+
           echo "files=$FILES" >> $GITHUB_OUTPUT
 
-      - name: Ask Devin to update, commit & push docs
+      - name: Ask Devin to update docs
         id: devin-docs
         env:
           DEVIN_API_KEY:   ${{ secrets.DEVIN_API_KEY }}
           CHANGED_FILES:   ${{ steps.pr-files.outputs.files }}
         run: |
-          UPDATE_PROMPT="
+          PROMPT="""
           You are Devin Docs Assistant.
-          1. Analyze the codebase and review the diffs in PR #${{ github.event.pull_request.number }}.
-          2. Update only the existing documentation files to match the code changes.
-          3. Commit those doc updates with the message: \"auto-update via Devin [skip docs]\".
-          4. Push that commit back into the PR branch ($GITHUB_REF_NAME).
-          5. Do not modify code, create a new README.md file if documentation does not exist.
-          6. Ensure your commit message includes [skip docs] so this workflow does not retrigger."
-          ESCAPED=$(jq -Rs --arg p "$UPDATE_PROMPT" '$p')
+          1. Review all changed files in PR #${{ github.event.pull_request.number }} (files: $CHANGED_FILES).
+          2. Update any existing documentation files (e.g., docs/, README.md) to reflect the code changes.
+          3. If no documentation exists (no README.md), create a README.md at the project root summarizing the project and changes.
+          4. Commit your changes with message "docs: auto-update via Devin [skip docs]".
+          5. Push the commit back to the PR branch ($GITHUB_REF_NAME).
+          6. If documentation already fully reflects changes, do nothing.
+          """
+          ESCAPED=$(jq -Rs --arg p "$PROMPT" '$p')
           curl -s -X POST \
             -H "Authorization: Bearer $DEVIN_API_KEY" \
             -H "Content-Type: application/json" \
@@ -56,5 +63,6 @@ jobs:
 
       - name: Wait for Devin to finish
         run: |
-          echo "⏳ Polling Devin session until completion..."
-          # insert your polling logic here (GET /v1/sessions/{session_id})
+          echo "⏳ Waiting for Devin to complete..."
+          # Implement polling logic here (GET /v1/sessions/{session_id})
+```
