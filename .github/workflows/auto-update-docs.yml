@@ -41,11 +41,11 @@ jobs:
         run: |
           UPDATE_PROMPT="
           You are Devin Docs Assistant.
-          1. Review the diffs in PR #${{ github.event.pull_request.number }} (files: $CHANGED_FILES).
-          2. Update only the existing documentation files (under docs/) to match the code changes.
-          3. Commit those doc updates with the message: \"docs: auto-update via Devin [skip docs]\".
+          1. Review the diffs in PR #${{ github.event.pull_request.number }}.
+          2. Update only the existing documentation files to match the code changes.
+          3. Commit those doc updates with the message: \"auto-update via Devin [skip docs]\".
           4. Push that commit back into the PR branch ($GITHUB_REF_NAME).
-          5. Do not modify code or create any new docs.
+          5. Do not modify code, create new README.md file if documentation does not exist.
           6. Ensure your commit message includes [skip docs] so this workflow does not retrigger."
           ESCAPED=$(jq -Rs --arg p "$UPDATE_PROMPT" '$p')
           curl -s -X POST \
