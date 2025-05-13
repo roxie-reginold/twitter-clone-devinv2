@@ -37,7 +37,7 @@ A full-stack Twitter clone application with real-time updates, user authenticati
 
 ### Installation
 
-1. Clone the repository
+1. Clone the repository 
 ```bash
 git clone https://github.com/gurusintechlabs/twitter-clone.git
 cd twitter-clone
