@@ -1,0 +1,61 @@
+# .github/workflows/auto-update-docs.yml
+name: Automated Documentation Update
+
+on:
+  push:
+    branches: ["**"]
+
+permissions:
+  contents: write       # needed to push updated docs
+  pull-requests: read
+  issues: read
+
+jobs:
+  update-docs:
+    runs-on: ubuntu-latest
+    # only run when:
+    #  • the pusher isn’t Devin’s bot
+    #  • the commit message doesn’t include [skip-devin]
+    #  • there are changes in src/ (or any code folder you prefer)
+    if: >
+      github.actor != 'devin[bot]' &&
+      !contains(github.event.head_commit.message, '[skip-devin]') &&
+      (contains(join(github.event.head_commit.added, github.event.head_commit.modified), 'src/') ||
+       contains(join(github.event.head_commit.added, github.event.head_commit.modified), 'lib/'))
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Launch Devin to Update Docs
+        id: devin-update
+        env:
+          DEVIN_API_KEY: ${{ secrets.DEVIN_API_KEY }}
+          PLAYBOOK_ID:   ${{ secrets.DEVIN_PLAYBOOK_ID }}
+        run: |
+          PROMPT="Please update existing documentation based on the latest code changes in $GITHUB_REPOSITORY at commit $GITHUB_SHA."
+          curl -s -X POST \
+            -H "Authorization: Bearer $DEVIN_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+                  "prompt": "'"$PROMPT"'",
+                  "playbook_id": "'"$PLAYBOOK_ID"'",
+                  "idempotent": true
+                }' \
+            "https://api.devin.ai/v1/sessions"
+
+      - name: Wait for Devin session to finish
+        # You can implement polling here (e.g. a small script that GETs /sessions/{id})
+        run: echo "🚧 implement polling logic to wait until Devin finishes"
+
+      - name: Commit & Push Updated Docs
+        run: |
+          git config user.name  "devin[bot]"
+          git config user.email "devin@cognition.ai"
+          git add docs/
+          git diff --quiet --exit-code || (
+            git commit -m "docs: auto-update via Devin [skip-devin]" &&
+            git push origin HEAD:${{ github.ref_name }}
+          )
