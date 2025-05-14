@@ -11,7 +11,9 @@ A full-stack Twitter clone application with real-time updates, user authenticati
 - Follow/unfollow users
 - Real-time updates for new tweets and notifications
 - Responsive design for mobile and desktop
-
+- Hashtag support for tweets (#hashtag)
+- Trending topics based on popular hashtags
+ 
 ## Tech Stack
 
 ### Frontend
