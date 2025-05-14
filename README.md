@@ -11,6 +11,7 @@ A full-stack Twitter clone application with real-time updates, user authenticati
 - Follow/unfollow users
 - Real-time updates for new tweets and notifications
 - Responsive design for mobile and desktop
+- Automated documentation updates via GitHub Actions
 
 ## Tech Stack
 
@@ -27,6 +28,10 @@ A full-stack Twitter clone application with real-time updates, user authenticati
 - MongoDB for database
 - JWT for authentication
 - Socket.io for real-time updates
+
+### DevOps
+- GitHub Actions for CI/CD
+- Automated documentation updates using Devin AI
 
 ## Getting Started
 
@@ -98,8 +103,14 @@ twitter-clone/
 │   │   ├── utils/
 │   │   └── index.js
 │   └── package.json
+├── docs/
+│   └── automated-documentation.md
 └── README.md
 ```
+
+## Documentation
+
+This project includes automated documentation updates via GitHub Actions. For more information about the automated documentation workflow, see [Automated Documentation Workflow](./docs/automated-documentation.md).
 
 ## License
 
