@@ -7,7 +7,7 @@ A full-stack Twitter clone application with real-time updates, user authenticati
 - User authentication (signup, login, logout)
 - Create, read, update, and delete tweets
 - Like and retweet functionality
-- User profiles with avatar and bio
+- User profiles with avatar and bio 
 - Follow/unfollow users
 - Real-time updates for new tweets and notifications
 - Responsive design for mobile and desktop
